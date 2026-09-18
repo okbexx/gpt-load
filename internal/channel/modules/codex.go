@@ -34,10 +34,12 @@ func Codex() spec.Module {
 					spec.AuthorizationOAuthFile,
 				},
 			},
-			Params: []spec.Field{{
-				Key: "base_url", Label: "Base URL", InputKind: spec.InputURL,
-				Normalizer: spec.NormalizeOptionalHTTPSBaseURL,
-			}},
+			Params: []spec.Field{
+				{Key: "base_url", Label: "Base URL", InputKind: spec.InputURL,
+					Normalizer: spec.NormalizeOptionalHTTPSBaseURL},
+				{Key: "execution_driver", Label: "Execution driver (default)", InputKind: spec.InputText,
+					Normalizer: spec.NormalizeOptionalCodexExecutionDriver},
+			},
 			Credentials: []spec.Field{},
 			Provider: spec.ProviderBinding{
 				ProviderKind:    spec.ProviderCodex,

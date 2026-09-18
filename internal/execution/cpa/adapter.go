@@ -24,6 +24,7 @@ import (
 	"gpt-load/internal/protocol"
 	"gpt-load/internal/reasoning"
 	"gpt-load/internal/subscription"
+	"gpt-load/internal/subscription/providers/codex"
 	providerobservation "gpt-load/internal/subscription/providers/observation"
 	subscriptionruntime "gpt-load/internal/subscription/runtime"
 	"gpt-load/internal/usage"
@@ -38,9 +39,11 @@ var subscriptionResponseHeaderNames = [...]string{
 	"X-Goog-Request-Id",
 	"X-Amzn-Requestid",
 	"Retry-After",
+	"X-GPT-Load-Driver",
 }
 
 type Adapter struct {
+	piExecutor  codex.Executor
 	credentials credentialPreparer
 	channels    *channel.Registry
 	providers   map[channel.ProviderKind]providerBridge
@@ -104,6 +107,9 @@ func (a *Adapter) ValidateRouteCapability(
 // Execute validates and dispatches one unary subscription attempt through the
 // provider bridge selected by the compiled channel definition.
 func (a *Adapter) Execute(ctx context.Context, spec execution.AttemptSpec) (result execution.AttemptResult) {
+	if code := a.piAdmission(spec, false); code != "" {
+		return unaryNotSent(execution.ErrorKindConversionUnsupported, "experimental pi capability unavailable", code, nil)
+	}
 	spec = execution.NewAttemptSpec(spec)
 	defer func() {
 		normalizeCPAImagesAttemptResult(spec, &result)
@@ -286,6 +292,9 @@ func (a *Adapter) ExecuteStream(
 	spec execution.AttemptSpec,
 	sink execution.StreamSink,
 ) (result execution.StreamResult) {
+	if code := a.piAdmission(spec, false); code != "" {
+		return streamNotSent(execution.ErrorKindConversionUnsupported, "experimental pi capability unavailable", code)
+	}
 	spec = execution.NewAttemptSpec(spec)
 	defer func() {
 		normalizeCPAImagesStreamResult(spec, &result)
@@ -541,6 +550,21 @@ func (a *Adapter) validateSpec(spec execution.AttemptSpec) (providerBridge, stri
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve subscription base URL: %w", err)
 	}
+	if providerKind == channel.ProviderCodex {
+		var selection struct {
+			Driver string `json:"execution_driver"`
+		}
+		_ = json.Unmarshal(target.TargetConfig, &selection)
+		if selection.Driver == "pi-experimental" {
+			if a.piExecutor == nil {
+				return nil, "", errors.New("experimental pi driver is disabled")
+			}
+			if spec.ClientProtocol != protocol.OpenAIResponses || spec.Operation != execution.OperationResponsesCreate || spec.RouteMode != execution.RouteNative {
+				return nil, "", errors.New("experimental pi capability unsupported")
+			}
+			provider = &piProviderBridge{base: &codexProviderBridge{executor: a.piExecutor}}
+		}
+	}
 	return provider, baseURL, nil
 }
 
@@ -560,6 +584,19 @@ func bridgeRequest(
 	payload := append([]byte(nil), spec.Body...)
 	headers := spec.Header.Clone()
 	requestPath := ""
+	// The Pi executor rejects body/envelope model disagreement; resolve aliases
+	// at the same gateway-owned boundary rather than silently changing them in Pi.
+	var driver struct {
+		Driver string `json:"execution_driver"`
+	}
+	_ = json.Unmarshal(spec.TargetConfig, &driver)
+	if driver.Driver == "pi-experimental" && spec.ChannelID == string(channel.Codex) && spec.ClientModel != spec.UpstreamModel {
+		rewritten, err := dialect.NewOpenAIResponses().RewriteRequestModel(&dialect.ParsedRequest{Method: spec.Method, Path: spec.Path, Header: headers, Body: payload}, spec.UpstreamModel)
+		if err != nil {
+			return providerRequest{}, err
+		}
+		payload = rewritten.Body
+	}
 	if spec.Operation == execution.OperationWebSearch {
 		if spec.Method != http.MethodPost || spec.Path != "/v1/alpha/search" || stream {
 			return providerRequest{}, fmt.Errorf("unsupported Codex search request")
@@ -594,12 +631,14 @@ func bridgeRequest(
 	return providerRequest{
 		AttemptID: spec.AttemptID, Model: spec.UpstreamModel, Payload: payload,
 		Format: formatFor(spec.ClientProtocol), RequestPath: requestPath, Headers: headers,
-		ConfiguredHeaders:    append([]string(nil), spec.ConfiguredHeaders...),
-		OriginalRequest:      append([]byte(nil), payload...),
-		ContinuityKey:        spec.ContinuityKey,
-		BaseURL:              baseURL,
-		ProxyURL:             proxySettings.URL,
-		ProxyFromEnvironment: proxySettings.FromEnvironment,
+		ConfiguredHeaders:            append([]string(nil), spec.ConfiguredHeaders...),
+		OriginalRequest:              append([]byte(nil), payload...),
+		ContinuityKey:                spec.ContinuityKey,
+		CredentialID:                 spec.Credential.ID,
+		CredentialIdentityGeneration: spec.Credential.IdentityGeneration,
+		BaseURL:                      baseURL,
+		ProxyURL:                     proxySettings.URL,
+		ProxyFromEnvironment:         proxySettings.FromEnvironment,
 	}, nil
 }
 
@@ -706,8 +745,12 @@ func unaryExecutionError(
 		definitelyNotSentNetworkError(err) {
 		dispatchState = execution.DispatchNotSent
 	}
+	var piErr *codex.PiError
+	if errors.As(err, &piErr) {
+		dispatchState = execution.DispatchState(piErr.DispatchState())
+	}
 	return execution.AttemptResult{
-		DispatchState: dispatchState, ResponseStarted: status != 0,
+		DispatchState: dispatchState, ResponseStarted: status != 0 && dispatchState != execution.DispatchNotSent,
 		StatusCode: status, Error: evidence,
 	}
 }

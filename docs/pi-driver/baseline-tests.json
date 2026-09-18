@@ -1,0 +1,17 @@
+{
+  "passed_packages": 62,
+  "failed_packages": [
+    "gpt-load/internal/webui"
+  ],
+  "failed_top_level_tests": [
+    "TestComposeShellPortOverridesDotEnvEverywhere",
+    "TestComposeHostBindingsInheritHostAndAllowIndependentOverrides",
+    "TestComposeBindsLoopbackAndConfiguresContainerAllInterfaces",
+    "TestComposeProjectsHaveIndependentNamesApplicationPortsAndVolumes",
+    "TestComposeResolvesNamedVolumeContainerPathsAndMajorChannelImage"
+  ],
+  "log": "docs/pi-driver/evidence/baseline-go-test.txt",
+  "upstream_commit": "b517f713204ea6507a0451e7988e08e428ca2bca",
+  "command": "GOMAXPROCS=2 go test -p=2 -count=1 . ./internal/...",
+  "environment_failure": "Local Docker Compose lacks --no-env-resolution; compose configuration checks fail on unmodified baseline."
+}

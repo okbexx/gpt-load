@@ -1,0 +1,153 @@
+go: downloading go.uber.org/dig v1.19.0
+go: downloading github.com/maximhq/bifrost/core v1.9.0
+go: downloading gorm.io/driver/mysql v1.6.0
+go: downloading github.com/nicksnyder/go-i18n/v2 v2.6.1
+go: downloading gorm.io/driver/postgres v1.6.2
+go: downloading github.com/bytedance/sonic v1.15.3-0.20260730064818-2a36d6da63e2
+go: downloading github.com/rs/zerolog v1.34.0
+go: downloading github.com/valyala/fasthttp v1.74.0
+go: downloading github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
+go: downloading github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
+go: downloading github.com/aws/aws-sdk-go-v2 v1.42.0
+go: downloading github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10
+go: downloading github.com/aws/aws-sdk-go-v2/config v1.32.14
+go: downloading github.com/aws/aws-sdk-go-v2/credentials v1.19.14
+go: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0
+go: downloading github.com/aws/aws-sdk-go-v2/service/sts v1.41.10
+go: downloading github.com/aws/smithy-go v1.27.1
+go: downloading github.com/fasthttp/websocket v1.5.12
+go: downloading github.com/mark3labs/mcp-go v0.43.2
+go: downloading github.com/go-sql-driver/mysql v1.8.1
+go: downloading github.com/jackc/pgx/v5 v5.10.0
+go: downloading go.starlark.net v0.0.0-20260102030733-3fee463870c9
+go: downloading github.com/golang-jwt/jwt/v5 v5.3.1
+go: downloading github.com/mattn/go-colorable v0.1.14
+go: downloading github.com/molecule-man/go-brrr v1.0.1
+go: downloading github.com/valyala/bytebufferpool v1.0.0
+go: downloading github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2
+go: downloading github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0
+go: downloading github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.21
+go: downloading github.com/aws/aws-sdk-go-v2/internal/ini v1.8.6
+go: downloading github.com/aws/aws-sdk-go-v2/service/signin v1.0.9
+go: downloading github.com/aws/aws-sdk-go-v2/service/sso v1.30.15
+go: downloading github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.19
+go: downloading github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.29
+go: downloading github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.7
+go: downloading github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.21
+go: downloading github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.22
+go: downloading github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.13
+go: downloading github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.21
+go: downloading filippo.io/edwards25519 v1.1.1
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading github.com/invopop/jsonschema v0.13.0
+go: downloading github.com/spf13/cast v1.10.0
+go: downloading github.com/yosida95/uritemplate/v3 v3.0.2
+go: downloading github.com/savsgio/gotils v0.0.0-20250408102913-196191ec6287
+go: downloading github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
+go: downloading github.com/kylelemons/godebug v1.1.0
+go: downloading github.com/bytedance/gopkg v0.1.4
+go: downloading github.com/cloudwego/base64x v0.1.7
+go: downloading golang.org/x/arch v0.23.0
+go: downloading github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.29
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading github.com/wk8/go-ordered-map/v2 v2.1.8
+go: downloading github.com/bytedance/sonic/loader v0.5.2
+go: downloading github.com/bahlo/generic-list-go v0.2.0
+go: downloading github.com/mailru/easyjson v0.9.1
+go: downloading github.com/twitchyliquid64/golang-asm v0.15.1
+go: downloading github.com/klauspost/cpuid/v2 v2.3.0
+ok  	gpt-load	0.013s
+ok  	gpt-load/internal/accessquota	0.006s
+ok  	gpt-load/internal/affinity	0.001s
+ok  	gpt-load/internal/app	1.322s
+ok  	gpt-load/internal/catalog	0.031s
+ok  	gpt-load/internal/channel	0.012s
+?   	gpt-load/internal/channel/modules	[no test files]
+?   	gpt-load/internal/channel/spec	[no test files]
+ok  	gpt-load/internal/connection	0.001s
+ok  	gpt-load/internal/container	1.730s
+ok  	gpt-load/internal/control	7.349s
+ok  	gpt-load/internal/dialect	0.016s
+ok  	gpt-load/internal/execution	0.003s
+ok  	gpt-load/internal/execution/bifrost	2.612s
+ok  	gpt-load/internal/execution/cpa	0.375s
+ok  	gpt-load/internal/execution/geminiimage	0.003s
+ok  	gpt-load/internal/execution/responsealias	0.002s
+ok  	gpt-load/internal/execution/wsnative	0.010s
+ok  	gpt-load/internal/gateway	3.843s
+ok  	gpt-load/internal/health	0.004s
+ok  	gpt-load/internal/httplifecycle	0.004s
+ok  	gpt-load/internal/outboundproxy	0.003s
+ok  	gpt-load/internal/parameteroverride	0.039s
+ok  	gpt-load/internal/platform/authkey	0.002s
+ok  	gpt-load/internal/platform/canonicaljson	0.003s
+ok  	gpt-load/internal/platform/config	0.005s
+ok  	gpt-load/internal/platform/contentcoding	0.010s
+ok  	gpt-load/internal/platform/encryption	0.046s
+ok  	gpt-load/internal/platform/epochms	0.001s
+ok  	gpt-load/internal/platform/errors	0.002s
+ok  	gpt-load/internal/platform/httpclient	0.006s
+ok  	gpt-load/internal/platform/httpheader	0.003s
+ok  	gpt-load/internal/platform/httproute	0.005s
+ok  	gpt-load/internal/platform/i18n	0.005s
+?   	gpt-load/internal/platform/i18n/locales	[no test files]
+ok  	gpt-load/internal/platform/redact	0.004s
+ok  	gpt-load/internal/platform/response	0.004s
+ok  	gpt-load/internal/platform/securefile	0.004s
+ok  	gpt-load/internal/platform/utils	0.003s
+ok  	gpt-load/internal/platform/version	0.001s
+ok  	gpt-load/internal/pricing	0.005s
+ok  	gpt-load/internal/protocol	0.001s
+ok  	gpt-load/internal/provideradapter	0.009s
+ok  	gpt-load/internal/ratelimit	0.001s
+?   	gpt-load/internal/reasoning	[no test files]
+ok  	gpt-load/internal/releasecheck	0.034s
+ok  	gpt-load/internal/requestlog	1.758s
+ok  	gpt-load/internal/scheduler	3.122s
+ok  	gpt-load/internal/state	0.057s
+ok  	gpt-load/internal/state/loader	0.308s
+ok  	gpt-load/internal/storage	3.972s
+ok  	gpt-load/internal/storage/dbtx	0.005s
+ok  	gpt-load/internal/storage/migrations	1.086s
+ok  	gpt-load/internal/storage/models	0.003s
+ok  	gpt-load/internal/subscription	0.567s
+ok  	gpt-load/internal/subscription/providers	0.434s
+ok  	gpt-load/internal/subscription/providers/antigravity	0.009s
+ok  	gpt-load/internal/subscription/providers/claude	0.035s
+ok  	gpt-load/internal/subscription/providers/codex	0.024s
+ok  	gpt-load/internal/subscription/providers/grok	0.009s
+ok  	gpt-load/internal/subscription/providers/importfile	0.005s
+ok  	gpt-load/internal/subscription/providers/observation	0.002s
+ok  	gpt-load/internal/subscription/runtime	0.004s
+ok  	gpt-load/internal/telemetry	0.025s
+?   	gpt-load/internal/testutil/encryptiontest	[no test files]
+ok  	gpt-load/internal/testutil/fakeupstream	0.144s
+?   	gpt-load/internal/testutil/sqlitetest	[no test files]
+ok  	gpt-load/internal/usage	0.001s
+?   	gpt-load/internal/usagecost	[no test files]
+--- FAIL: TestComposeShellPortOverridesDotEnvEverywhere (0.36s)
+    container_contract_test.go:36: docker compose config: exit status 16
+        unknown flag: --no-env-resolution
+--- FAIL: TestComposeHostBindingsInheritHostAndAllowIndependentOverrides (0.09s)
+    --- FAIL: TestComposeHostBindingsInheritHostAndAllowIndependentOverrides/host_default (0.03s)
+        container_contract_test.go:153: docker compose config: exit status 16
+            unknown flag: --no-env-resolution
+    --- FAIL: TestComposeHostBindingsInheritHostAndAllowIndependentOverrides/main_service_override (0.03s)
+        container_contract_test.go:153: docker compose config: exit status 16
+            unknown flag: --no-env-resolution
+    --- FAIL: TestComposeHostBindingsInheritHostAndAllowIndependentOverrides/oauth_callback_override (0.03s)
+        container_contract_test.go:153: docker compose config: exit status 16
+            unknown flag: --no-env-resolution
+--- FAIL: TestComposeBindsLoopbackAndConfiguresContainerAllInterfaces (0.03s)
+    container_contract_test.go:382: docker compose config: exit status 16
+        unknown flag: --no-env-resolution
+--- FAIL: TestComposeProjectsHaveIndependentNamesApplicationPortsAndVolumes (0.04s)
+    container_contract_test.go:473: docker compose config for review-one: exit status 16
+        unknown flag: --no-env-resolution
+--- FAIL: TestComposeResolvesNamedVolumeContainerPathsAndMajorChannelImage (0.03s)
+    container_contract_test.go:538: docker compose config: exit status 16
+        unknown flag: --no-env-resolution
+FAIL
+FAIL	gpt-load/internal/webui	2.023s
+FAIL

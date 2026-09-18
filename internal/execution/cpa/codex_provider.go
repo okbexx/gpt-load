@@ -382,6 +382,16 @@ func (*codexProviderBridge) ClassifyError(
 	if err == nil {
 		return 0, nil
 	}
+	var piErr *codex.PiError
+	if errors.As(err, &piErr) {
+		kind := execution.ErrorKindTransport
+		if piErr.DispatchState() == "not_sent" {
+			kind = execution.ErrorKindConversionUnsupported
+		} else if piErr.StatusCode() != 0 {
+			kind = execution.ErrorKindHTTP
+		}
+		return piErr.StatusCode(), &execution.ErrorEvidence{Kind: kind, StatusCode: piErr.StatusCode(), Code: piErr.ErrorCode(), Summary: piErr.Error(), ReplaySafety: execution.ReplaySafetyUnknown}
+	}
 	status := 0
 	var statusError interface{ StatusCode() int }
 	if errors.As(err, &statusError) && statusError != nil {

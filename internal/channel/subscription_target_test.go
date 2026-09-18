@@ -2,6 +2,7 @@ package channel
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -35,7 +36,11 @@ func TestSubscriptionTargetsKeepOfficialDefaultsOutOfConfiguration(t *testing.T)
 			if err := json.Unmarshal(encoded, &hints); err != nil || !reflect.DeepEqual(hints.Roots, test.roots) {
 				t.Errorf("official hints = %v, %v; want %v", hints.Roots, err, test.roots)
 			}
-			if len(descriptor.ParamFields) != 1 || descriptor.ParamFields[0].Key != "base_url" ||
+			if descriptor.ID == Codex {
+				if len(descriptor.ParamFields) != 2 || descriptor.ParamFields[0].Key != "base_url" || descriptor.ParamFields[1].Key != "execution_driver" {
+					t.Errorf("Codex parameter fields = %#v", descriptor.ParamFields)
+				}
+			} else if len(descriptor.ParamFields) != 1 || descriptor.ParamFields[0].Key != "base_url" ||
 				descriptor.ParamFields[0].Required || descriptor.ParamFields[0].DefaultValue != nil {
 				t.Errorf("optional root field = %#v", descriptor.ParamFields)
 			}
@@ -49,6 +54,17 @@ func TestSubscriptionTargetsKeepOfficialDefaultsOutOfConfiguration(t *testing.T)
 			for _, raw := range []string{`{"base_url":"http://relay.example"}`, `{"base_url":"https://relay.example?key=value"}`, `{"base_url":"https://user:pass@relay.example"}`} {
 				if _, err := registry.Resolve(test.id, json.RawMessage(raw)); err == nil {
 					t.Errorf("invalid root accepted: %s", raw)
+				}
+			}
+			if test.id == Codex {
+				piTarget, err := registry.Resolve(test.id, json.RawMessage(`{"execution_driver":"pi-experimental"}`))
+				if err != nil || string(piTarget.TargetConfig) != `{"execution_driver":"pi-experimental"}` {
+					t.Errorf("Pi target = %s, %v", piTarget.TargetConfig, err)
+				}
+				for _, value := range []string{"unknown", "Pi"} {
+					if _, err := registry.Resolve(test.id, json.RawMessage(fmt.Sprintf(`{"execution_driver":%q}`, value))); err == nil {
+						t.Errorf("invalid execution driver accepted: %s", value)
+					}
 				}
 			}
 		})

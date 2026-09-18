@@ -536,7 +536,7 @@ func (r *Registry) Resolve(id ID, raw json.RawMessage) (ResolvedTarget, error) {
 		return ResolvedTarget{}, err
 	}
 	targetConfig := resolvedTargetConfig(definition, params)
-	return ResolvedTarget{
+	target := ResolvedTarget{
 		ResponsesWebsocket: definition.responsesWebsocket,
 
 		ChannelID:         id,
@@ -548,7 +548,8 @@ func (r *Registry) Resolve(id ID, raw json.RawMessage) (ResolvedTarget, error) {
 		responsesStoreHandlings: cloneResponsesStoreHandlings(
 			definition.responsesStoreHandlings,
 		),
-	}, nil
+	}
+	return target, nil
 }
 
 // ResolveExecutionTarget validates a frozen runtime target produced by Resolve.

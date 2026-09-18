@@ -70,6 +70,19 @@ func NormalizeOptionalHTTPSBaseURL(value string) (string, error) {
 	return NormalizeHTTPSBaseURL(value)
 }
 
+// NormalizeOptionalCodexExecutionDriver keeps the default CPA path implicit.
+// Pi is opt-in and only the experimental driver name is accepted.
+func NormalizeOptionalCodexExecutionDriver(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "cpa":
+		return "", nil
+	case "pi-experimental":
+		return "pi-experimental", nil
+	default:
+		return "", fmt.Errorf("must be empty, cpa, or pi-experimental")
+	}
+}
+
 // NormalizeCloudIdentifier rejects whitespace and control characters in a
 // provider-owned cloud configuration value.
 func NormalizeCloudIdentifier(value string) (string, error) {

@@ -25,6 +25,10 @@ type websocketProvider interface {
 // OpenWebsocket 使用既有凭据刷新和网络准备，Session 仍由单个下游连接拥有。
 func (a *Adapter) OpenWebsocket(ctx context.Context, spec execution.AttemptSpec) (execution.WebsocketSession, execution.WebsocketResult) {
 	result := execution.WebsocketResult{DispatchState: execution.DispatchNotSent}
+	if code := a.piAdmission(spec, true); code != "" {
+		result.Error = notSentEvidence(execution.ErrorKindConversionUnsupported, "experimental pi does not support websocket", code)
+		return nil, result
+	}
 	reject := func() (execution.WebsocketSession, execution.WebsocketResult) {
 		result.Error = requestValidationEvidence(errors.New("unsupported native websocket request"))
 		return nil, result

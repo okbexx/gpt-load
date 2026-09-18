@@ -182,7 +182,7 @@ func BuildContainer() (*dig.Container, error) {
 		},
 		newSubscriptionRuntime,
 		subscription.NewCredentialManager,
-		cpaexecutor.NewAdapter,
+		cpaexecutor.NewAdapterWithConfig,
 		newProviderAdapterRegistry,
 		func(registry *provideradapter.Registry) execution.Executor { return registry },
 		func(runtime *bifrostexecutor.RuntimeManager) app.ExecutionRuntime { return runtime },

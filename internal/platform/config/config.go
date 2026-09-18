@@ -108,6 +108,9 @@ type DatabaseMetadata struct {
 
 // Config contains static environment configuration for the application process.
 type Config struct {
+	ExperimentalPiEnabled     bool
+	PiBridgeURL               string
+	PiBridgeSecret            string
 	Server                    ServerConfig
 	DataDir                   string
 	DatabaseDSN               string
@@ -242,7 +245,14 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	piEnabled, err := parseOptionalBool("EXPERIMENTAL_PI_ENABLED")
+	if err != nil {
+		return nil, err
+	}
 	return &Config{
+		ExperimentalPiEnabled: piEnabled != nil && *piEnabled,
+		PiBridgeURL:           os.Getenv("PI_BRIDGE_URL"),
+		PiBridgeSecret:        os.Getenv("PI_BRIDGE_SECRET"),
 		Server: ServerConfig{
 			Host:                    valueOrDefault("HOST", defaultHost),
 			Port:                    port,

@@ -195,9 +195,10 @@ func TestCodexIsTheOnlySubscriptionChannelWithoutExposingExecutor(t *testing.T) 
 		!reflect.DeepEqual(descriptor.Capabilities.CredentialActions, []CredentialAction{CredentialActionResetCredit}) {
 		t.Fatalf("subscription capabilities = %#v", descriptor.Capabilities)
 	}
-	if len(descriptor.ParamFields) != 1 || descriptor.ParamFields[0].Key != "base_url" ||
-		descriptor.ParamFields[0].InputKind != InputURL || descriptor.ParamFields[0].Required {
-		t.Fatalf("Codex Base URL field = %#v", descriptor.ParamFields)
+	if len(descriptor.ParamFields) < 2 || descriptor.ParamFields[0].Key != "base_url" ||
+		descriptor.ParamFields[0].InputKind != InputURL || descriptor.ParamFields[0].Required ||
+		descriptor.ParamFields[1].Key != "execution_driver" || descriptor.ParamFields[1].Required {
+		t.Fatalf("Codex parameter fields = %#v", descriptor.ParamFields)
 	}
 	openAI, ok := registry.Get(OpenAI)
 	if !ok || openAI.Connection.Type != "api_key" {
