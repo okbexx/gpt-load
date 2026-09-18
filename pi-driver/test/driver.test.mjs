@@ -54,6 +54,27 @@ test('valid JWT base64url payloads are accepted',async t=>{
   assert.match(payload,/[-_]/);
   const r=await f.send({credential:{access_token:`e30.${payload}.synthetic`,account_id:'synthetic-account'}});
   assert.equal(r.status,200);
+  assert.equal(r.frames.at(-1).type,'done');
+  assert.equal(f.requests.length,1);
+  assert.equal(f.requests[0].headers.authorization,`Bearer e30.${payload}.synthetic`);
+});
+
+test('JWT parser compatibility remains request-local and preserves signed bytes', async t => {
+  const f = await fixture(t);
+  const credentials = ['synthetic-account-a', 'synthetic-account-b'].map((account, index) => {
+    const payload = Buffer.from(JSON.stringify({'https://api.openai.com/auth':{chatgpt_account_id:account},extra:'💡💡💡'})).toString('base64url');
+    assert.match(payload, /[-_]/);
+    const padded = index ? payload + '='.repeat((4 - payload.length % 4) % 4) : payload;
+    return {account_id: account, access_token: `e30.${padded}.synthetic-signature-${index}`};
+  });
+  const results = await Promise.all(credentials.map((credential, index) => f.send({credential, stream: index === 0})));
+  for (const result of results) assert.equal(result.frames.at(-1).type, 'done');
+  assert.equal(f.requests.length, credentials.length);
+  for (const request of f.requests) {
+    const credential = credentials.find(c => c.account_id === request.headers['chatgpt-account-id']);
+    assert.ok(credential);
+    assert.equal(request.headers.authorization, `Bearer ${credential.access_token}`);
+  }
 });
 
 test('admission rejects unsafe inputs before dispatch',async t=>{

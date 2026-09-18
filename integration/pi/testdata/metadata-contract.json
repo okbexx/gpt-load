@@ -1,0 +1,117 @@
+[
+  {
+    "name": "account-windows-and-normalization",
+    "input": {
+      "X-Codex-Primary-Used-Percent": "12.500",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-primary-reset-after-seconds": "60",
+      "x-codex-secondary-reset-at": "2000000000",
+      "x-codex-allowed": "1",
+      "x-codex-limit-reached": "0",
+      "x-codex-active-limit": "premium",
+      "retry-after": "17"
+    },
+    "expected": {
+      "x-codex-primary-used-percent": "12.5",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-primary-reset-after-seconds": "60",
+      "x-codex-secondary-reset-at": "2000000000",
+      "x-codex-allowed": "true",
+      "x-codex-limit-reached": "false",
+      "x-codex-active-limit": "premium",
+      "retry-after": "17"
+    }
+  },
+  {
+    "name": "tiny-percent-remains-decimal-across-both-boundaries",
+    "input": {
+      "x-codex-primary-used-percent": "0.0000001",
+      "x-codex-secondary-used-percent": "0.00000000000001"
+    },
+    "expected": {
+      "x-codex-primary-used-percent": "0.0000001",
+      "x-codex-secondary-used-percent": "0.00000000000001"
+    }
+  },
+  {
+    "name": "private-and-invalid-values-are-not-metadata",
+    "input": {
+      "authorization": "SYNTHETIC_PRIVATE",
+      "set-cookie": "SYNTHETIC_PRIVATE",
+      "x-request-id": "SYNTHETIC_PRIVATE",
+      "x-codex-turn-state": "SYNTHETIC_PRIVATE",
+      "x-codex-limit-name": "SYNTHETIC_PRIVATE",
+      "x-codex-primary-used-percent": "101",
+      "x-codex-secondary-used-percent": "NaN",
+      "x-codex-primary-window-minutes": "0",
+      "x-codex-primary-reset-after-seconds": "-1",
+      "x-codex-secondary-reset-at": "253402300800",
+      "x-codex-allowed": "yes",
+      "retry-after": "31622401"
+    },
+    "expected": {}
+  },
+  {
+    "name": "unknown-active-limit-cannot-become-account-quota",
+    "input": {
+      "x-codex-active-limit": "unknown-future-limit",
+      "x-codex-primary-used-percent": "90",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-allowed": "false",
+      "x-codex-bengalfox-primary-used-percent": "25",
+      "x-codex-bengalfox-primary-window-minutes": "10080",
+      "retry-after": "0"
+    },
+    "expected": {
+      "x-codex-bengalfox-primary-used-percent": "25",
+      "x-codex-bengalfox-primary-window-minutes": "10080",
+      "retry-after": "0"
+    }
+  },
+  {
+    "name": "unknown-namespace-suppresses-ambiguous-generic-window",
+    "input": {
+      "x-codex-primary-used-percent": "90",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-future-primary-used-percent": "42",
+      "x-codex-bengalfox-secondary-used-percent": "25",
+      "x-codex-bengalfox-allowed": "0"
+    },
+    "expected": {
+      "x-codex-bengalfox-secondary-used-percent": "25",
+      "x-codex-bengalfox-allowed": "false"
+    }
+  },
+  {
+    "name": "upper-and-zero-boundaries",
+    "input": {
+      "x-codex-primary-used-percent": "100.000",
+      "x-codex-secondary-used-percent": "0.000",
+      "x-codex-primary-window-minutes": "527040",
+      "x-codex-primary-reset-after-seconds": "31622400",
+      "x-codex-secondary-reset-at": "253402300799",
+      "retry-after": "31622400"
+    },
+    "expected": {
+      "x-codex-primary-used-percent": "100",
+      "x-codex-secondary-used-percent": "0",
+      "x-codex-primary-window-minutes": "527040",
+      "x-codex-primary-reset-after-seconds": "31622400",
+      "x-codex-secondary-reset-at": "253402300799",
+      "retry-after": "31622400"
+    }
+  },
+  {
+    "name": "noncanonical-numbers-and-booleans-rejected",
+    "input": {
+      "x-codex-primary-used-percent": "1e-7",
+      "x-codex-secondary-used-percent": "01",
+      "x-codex-primary-window-minutes": "+300",
+      "x-codex-primary-reset-after-seconds": "1.5",
+      "x-codex-secondary-reset-at": "Infinity",
+      "x-codex-allowed": "TRUE",
+      "retry-after": "-0"
+    },
+    "expected": {}
+  }
+]

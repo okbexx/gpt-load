@@ -103,7 +103,9 @@ func (r *piReader) next() (piFrame, error) {
 		// Never trust arbitrary bridge error strings as safe log content.
 		code := "pi_bridge_error"
 		switch f.Code {
-		case "unsupported_capability", "invalid_request", "unauthorized", "upstream_error", "transport_error", "cancelled", "internal_error", "overloaded":
+		case "unsupported_capability", "invalid_request", "unauthorized", "upstream_error", "transport_error", "cancelled", "internal_error", "overloaded",
+			"upstream_http_error", "upstream_redirect", "invalid_upstream_content_type", "missing_terminal", "pi_parse_error",
+			"timeout", "response_limit", "invalid_upstream_event", "upstream_failed", "driver_error", "duplicate_dispatch":
 			code = "pi_" + f.Code
 		}
 		return f, &PiError{code: code, dispatch: f.Dispatch, status: f.Status, retryAfter: piRetryAfter(f.RetryAfterSeconds)}

@@ -83,6 +83,15 @@ function decodeBase64Url(segment) {
   return Buffer.from(normalized + '='.repeat((4 - normalized.length % 4) % 4), 'base64').toString('utf8');
 }
 
+// Pi 0.85.1 uses atob (not a Base64URL decoder) for local claim extraction.
+// Give that parser a normalized copy ONLY; the fetch hook below always restores
+// the byte-exact signed credential for the network Authorization header.
+function piParserToken(token) {
+  const parts = token.split('.');
+  parts[1] = Buffer.from(parts[1], 'base64url').toString('base64');
+  return parts.join('.');
+}
+
 // No tee(): one bounded, pull-driven reader sends original event bytes to the
 // client before handing a copy to Pi. Pi's normalized events are never the wire.
 function captureBody(body, state, limits, emit, streaming, signal) {
@@ -179,13 +188,15 @@ export function createDriver({ token, allowedBaseUrls = [], limits: overrides = 
       const model = { id: v.model, name: v.model, api: 'openai-codex-responses', provider: 'openai-codex', baseUrl: v.base,
         reasoning: true, input: ['text', 'image'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 0, maxTokens: 0 };
       const events = codexStream(model, { messages: [] }, {
-        apiKey: v.credential.access_token, transport: 'sse', maxRetries: 0, signal: abort.signal,
+        apiKey: piParserToken(v.credential.access_token), transport: 'sse', maxRetries: 0, signal: abort.signal,
         sessionId: v.session_id || undefined,
         onPayload: () => ({ ...v.body, model: v.model, stream: true, store: false }),
         fetch: async (url, init) => {
           if (state.dispatched) fail('duplicate_dispatch', 0);
           state.dispatched = true;
-          const upstream = await fetch(url, { ...init, signal: abort.signal, redirect: 'manual' });
+          const wireHeaders = new Headers(init?.headers);
+          wireHeaders.set('authorization', `Bearer ${v.credential.access_token}`);
+          const upstream = await fetch(url, { ...init, headers: wireHeaders, signal: abort.signal, redirect: 'manual' });
           state.status = upstream.status;
           if (!upstream.ok) state.retryAfter = retrySeconds(upstream.headers.get('retry-after'));
           if (!upstream.ok) { await upstream.body?.cancel(); state.code = upstream.status >= 300 && upstream.status < 400 ? 'upstream_redirect' : 'upstream_http_error'; throw new Error(state.code); }

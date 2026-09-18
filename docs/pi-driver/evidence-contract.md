@@ -5,7 +5,7 @@ This document defines the machine-checked release-gate contract. It does **not**
 ## Inventory identity and rows
 
 - `baseline_commit` is a lowercase, 40-character Git SHA. Baseline source evidence is kept in each row's `evidence`/`provenance`; it is not Pi evidence.
-- `capabilities` is a non-empty array of unique rows. Every row explicitly sets `baseline_supported`, `pi_status`, and `release_gate_required` equal to `baseline_supported`.
+- `capabilities` is a non-empty array of unique rows. Every row explicitly sets `baseline_supported` and a valid `pi_status` (or its supported alias). When `release_gate_required` is supplied, it must equal `baseline_supported`; omitting it never removes a supported row from the gate.
 - `pi_status` must be one of `unverified`, `unknown`, `in_progress`, `implemented`, `verified`, `unsupported`, or `preserved_unsupported`. `verified` is not sufficient by itself.
 - If `pi` aliases `pi_status` or `pi.evidence`, aliases must agree. `baseline.support` must agree with `baseline_supported`; `pi_supported` is either `null` or boolean and must be `true` for a verified row.
 - Existing records remain unverified. Preserving CPA/Bifrost or a baseline source receipt is not Pi evidence.
@@ -18,7 +18,7 @@ Each receipt must be JSON with:
 
 ```json
 {
-  "kind": "contract" | "live",
+  "kind": "contract",
   "driver": "pi",
   "baseline_commit": "<same inventory SHA>",
   "status": "passed",
@@ -49,7 +49,7 @@ Every baseline-supported row must contain:
 }
 ```
 
-The referenced receipt must also appear in `pi_evidence`, have `kind: "live"`, and pass all receipt checks. Missing, contradictory, false, non-boolean, or malformed optional flags are malformed inventory (exit 2), not a bypass. Full parity always requires contract **and** authorized live evidence; no opt-in flag can weaken this rule.
+The referenced receipt must also appear in `pi_evidence`, have `kind: "live"`, and pass all receipt checks. A missing/unverified live record or unusable receipt blocks the capability (exit 1). Supplied malformed flags or contradictory schema aliases reject the inventory (exit 2). Full parity always requires contract **and** authorized live evidence; an omitted optional flag cannot weaken this rule, and a supplied `requires_live_verification` must be `true`.
 
 ## Relational inventory checks
 
@@ -65,7 +65,7 @@ When present, summaries are checked against records rather than frozen counts:
 `scripts/check-pi-parity.mjs [inventory.json]` emits JSON when the inventory is valid:
 
 - `0`: all required rows satisfy contract and live evidence requirements (`ready: true`)
-- `1`: valid inventory, but one or more required rows are blocked
-- `2`: malformed inventory, invalid summary relationships, unreadable evidence, or evidence outside the repository
+- `1`: valid inventory, but one or more required rows are blocked; this includes absent, mismatched, unreadable, or out-of-repository evidence (including symlink escape)
+- `2`: malformed/unreadable inventory or invalid summary/schema relationships
 
 The checked-in inventory is intentionally in the blocked state; this gate must not be used to claim parity.

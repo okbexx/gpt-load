@@ -26,7 +26,7 @@ node --test scripts/check-pi-parity.test.mjs
 printf '\n%s\n' '== Go regression tests =='
 "$GO_BIN" test -p=2 -count=1 ./internal/channel ./internal/container ./internal/execution/cpa ./internal/subscription/providers/codex
 printf '\n%s\n' '== Real Go -> Node -> pinned Pi; synthetic local upstream =='
-"$GO_BIN" test -p=2 -count=1 -tags=pi_integration ./integration/pi
+"$GO_BIN" test -p=2 -count=1 -tags=pi_integration ./integration/pi ./internal/execution/cpa
 printf '\n%s\n' '== Go vet and build =='
 "$GO_BIN" vet -p=2 ./...
 "$GO_BIN" build -p=2 -o "$TMP/gpt-load" .

@@ -384,13 +384,38 @@ func (*codexProviderBridge) ClassifyError(
 	}
 	var piErr *codex.PiError
 	if errors.As(err, &piErr) {
+		// Pi may report the already-open HTTP 200 when its terminal fails.
+		// That is not an HTTP rejection, nor evidence that replay is safe.
+		status := piErr.StatusCode()
+		if status < http.StatusBadRequest {
+			status = 0
+		}
 		kind := execution.ErrorKindTransport
-		if piErr.DispatchState() == "not_sent" {
+		switch {
+		case piErr.ErrorCode() == "pi_timeout" || ctx != nil && errors.Is(context.Cause(ctx), context.DeadlineExceeded):
+			kind, status = execution.ErrorKindTimeout, 0
+		case piErr.ErrorCode() == "pi_cancelled" || ctx != nil && errors.Is(context.Cause(ctx), context.Canceled):
+			kind, status = execution.ErrorKindCanceled, 0
+		case piErr.DispatchState() == "not_sent":
 			kind = execution.ErrorKindConversionUnsupported
-		} else if piErr.StatusCode() != 0 {
+		case status != 0:
 			kind = execution.ErrorKindHTTP
 		}
-		return piErr.StatusCode(), &execution.ErrorEvidence{Kind: kind, StatusCode: piErr.StatusCode(), Code: piErr.ErrorCode(), Summary: piErr.Error(), ReplaySafety: execution.ReplaySafetyUnknown}
+		evidence := &execution.ErrorEvidence{
+			Kind: kind, StatusCode: status, Type: piErr.ErrorType(), Code: piErr.ErrorCode(),
+			Summary: piErr.Error(), ReplaySafety: execution.ReplaySafetyUnknown,
+		}
+		if retry := piErr.RetryAfter(); retry != nil && *retry > 0 {
+			evidence.RetryAfter = *retry
+		}
+		// The bridge does not supply the upstream error body. Keep generic
+		// hints only: no model scope, credential refresh, or CPA replay claims.
+		if status == http.StatusTooManyRequests {
+			evidence.Hint = execution.FailureHintRateLimited
+		} else if status >= http.StatusInternalServerError {
+			evidence.Hint = execution.FailureHintHostError
+		}
+		return status, evidence
 	}
 	status := 0
 	var statusError interface{ StatusCode() int }

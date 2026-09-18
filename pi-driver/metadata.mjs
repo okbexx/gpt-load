@@ -40,7 +40,11 @@ export function safeMetadata(headers) {
       const field = WINDOW.exec(key)?.[1];
       if (!field) continue;
       if (field === 'used-percent') {
-        if (value.length <= 16 && /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value) && Number(value) <= 100) result[key] = String(Number(value));
+        if (value.length <= 16 && /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value) && Number(value) <= 100) {
+          // Number.toString() emits exponents for tiny percentages, which the
+          // second (Go) boundary deliberately rejects. Keep canonical decimals.
+          result[key] = value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+        }
       } else {
         const max = field === 'window-minutes' ? MAX_WINDOW_MINUTES : field === 'reset-at' ? MAX_RESET_AT : MAX_RETRY_SECONDS;
         const n = integer(value, max, 1);
