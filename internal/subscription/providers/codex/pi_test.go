@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPiConfig(t *testing.T) {
@@ -46,7 +47,7 @@ func TestPiUnaryContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, err := e.Execute(t.Context(), "id", Credential{AccessToken: "access", RefreshToken: "refresh-secret", AccountID: "account"}, ExecuteRequest{Model: "gpt-5", Format: "openai-response", Payload: []byte(`{"input":"hello"}`), Headers: http.Header{"Authorization": []string{"evil"}}})
-	if err != nil || response.Headers.Get("X-GPT-Load-Driver") != "pi-experimental" || response.Headers.Get("X-Request-Id") != "pi-1" {
+	if err != nil || response.Headers.Get("X-GPT-Load-Driver") != "pi-experimental" || response.Headers.Get("X-Request-Id") != "" {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
 }
@@ -87,5 +88,66 @@ func TestPiUnsupportedAndTransport(t *testing.T) {
 	var pe *PiError
 	if !errors.As(err, &pe) || pe.DispatchState() != "maybe_sent" {
 		t.Fatalf("transport=%v", err)
+	}
+}
+
+func TestPiSafeQuotaMetadata(t *testing.T) {
+	safe := map[string]string{"x-codex-primary-used-percent": "12.5", "x-codex-primary-window-minutes": "300", "x-codex-primary-reset-after-seconds": "60", "x-codex-allowed": "true", "x-codex-active-limit": "premium"}
+	input := map[string]string{}
+	for k, v := range safe {
+		input[k] = v
+	}
+	for k, v := range map[string]string{"x-codex-secret": "SECRET", "x-request-id": "SECRET", "set-cookie": "SECRET", "x-codex-limit-name": "SECRET", "x-codex-secondary-used-percent": "101", "x-codex-secondary-reset-at": "NaN"} {
+		input[k] = v
+	}
+	input["retry-after"] = "7"
+	h, q := piHeaders(piFrame{Headers: input})
+	if len(q) != len(safe) {
+		t.Fatalf("unsafe/lost quota: %#v", q)
+	}
+	for k, v := range safe {
+		if q[k] != v {
+			t.Errorf("%s = %q", k, q[k])
+		}
+	}
+	if h.Get("Retry-After") != "7" || h.Get("X-Request-Id") != "" {
+		t.Fatalf("headers %#v", h)
+	}
+	if len(NormalizePassiveQuotaWindows(q, time.Now())) != 1 {
+		t.Fatal("quota not consumable")
+	}
+}
+func TestPiRetryAfterFromBridge(t *testing.T) {
+	for _, value := range []string{"17", "0", "-1", "1.5", "31622401", `"SECRET"`, "null"} {
+		t.Run(value, func(t *testing.T) {
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				fmt.Fprintf(w, `{"type":"error","code":"upstream_http_error","status":429,"dispatch_state":"maybe_sent","retry_after_seconds":%s}`+"\n", value)
+			}))
+			defer srv.Close()
+			e, _ := NewPiExecutor(srv.URL, strings.Repeat("x", 32))
+			_, err := e.Execute(t.Context(), "", Credential{}, ExecuteRequest{Format: "openai-response", Payload: []byte(`{}`)})
+			var retry interface{ RetryAfter() *time.Duration }
+			if !errors.As(err, &retry) {
+				t.Fatalf("missing RetryAfter: %v", err)
+			}
+			got := retry.RetryAfter()
+			if value == "17" || value == "0" {
+				want := time.Duration(0)
+				if value == "17" {
+					want = 17 * time.Second
+				}
+				if got == nil || *got != want {
+					t.Fatalf("retry=%v want=%v", got, want)
+				}
+			} else if got != nil {
+				t.Fatalf("unsafe delay: %v", *got)
+			}
+			var pe *PiError
+			if !errors.As(err, &pe) || pe.DispatchState() != "maybe_sent" || strings.Contains(err.Error(), "SECRET") || calls != 1 {
+				t.Fatalf("unsafe error=%v calls=%d", err, calls)
+			}
+		})
 	}
 }

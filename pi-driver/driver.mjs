@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { once } from 'node:events';
+import { safeMetadata, retrySeconds } from './metadata.mjs';
 import { stream as codexStream } from '@earendil-works/pi-ai/api/openai-codex-responses';
 
 const DEFAULT_BASE = 'https://chatgpt.com/backend-api';
@@ -186,11 +187,12 @@ export function createDriver({ token, allowedBaseUrls = [], limits: overrides = 
           state.dispatched = true;
           const upstream = await fetch(url, { ...init, signal: abort.signal, redirect: 'manual' });
           state.status = upstream.status;
+          if (!upstream.ok) state.retryAfter = retrySeconds(upstream.headers.get('retry-after'));
           if (!upstream.ok) { await upstream.body?.cancel(); state.code = upstream.status >= 300 && upstream.status < 400 ? 'upstream_redirect' : 'upstream_http_error'; throw new Error(state.code); }
           if (!/^text\/event-stream(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '') || !upstream.body) {
             await upstream.body?.cancel(); state.code = 'invalid_upstream_content_type'; throw new Error(state.code);
           }
-          const headers = {};
+          const headers = safeMetadata(upstream.headers);
           // Restrict values as well as names: arbitrary error/request-id headers
           // are not trusted as a safe channel for credential-bearing text.
           headers['content-type'] = 'text/event-stream';
@@ -210,6 +212,7 @@ export function createDriver({ token, allowedBaseUrls = [], limits: overrides = 
       const code = state.code || (e instanceof DriverError ? e.code : 'driver_error');
       const status = state.dispatched ? state.status : (e instanceof DriverError && e.status >= 400 ? e.status : 500);
       const frame = errorFrame(code, state.dispatched ? state.status : status, state.dispatched);
+      if (state.retryAfter !== undefined) frame.retry_after_seconds = state.retryAfter;
       if (!res.destroyed) {
         if (!res.headersSent) res.writeHead(status >= 400 ? status : 500, { 'content-type': 'application/json', connection: 'close' });
         res.end(JSON.stringify(frame) + '\n');

@@ -186,3 +186,18 @@ test('slow request-body admission times out without dispatch',async t=>{
  const [res]=await once(req,'response');const chunks=[];for await(const chunk of res)chunks.push(chunk);
  assert.equal(res.statusCode,408);const frame=JSON.parse(Buffer.concat(chunks));assert.equal(frame.dispatch_state,'not_sent');assert.equal(frame.code,'timeout');assert.equal(f.requests.length,0);req.destroy();
 });
+
+test('quota metadata survives real Pi for unary and stream without private text', async t => {
+ const safe={'x-codex-primary-used-percent':'12.5','x-codex-primary-window-minutes':'300','x-codex-primary-reset-after-seconds':'60','x-codex-secondary-reset-at':'2000000000','x-codex-allowed':'true','x-codex-limit-reached':'false','x-codex-active-limit':'premium','x-codex-bengalfox-primary-used-percent':'25','x-codex-bengalfox-primary-window-minutes':'10080'};
+ const f=await fixture(t,(_req,res)=>{res.writeHead(200,{'content-type':'text/event-stream',...safe,'x-codex-private':'SECRET','x-request-id':'SECRET','set-cookie':'SECRET','x-codex-limit-name':'SECRET','x-codex-secondary-used-percent':'101','retry-after':'7'});res.end(native);});
+ for(const stream of [false,true]) {const r=await f.send({stream});assert.deepEqual(r.frames[0].headers,{'content-type':'text/event-stream',...safe,'retry-after':'7'});assert.equal(r.frames.at(-1).type,'done');assert.ok(!r.text.includes('SECRET'));}
+ assert.equal(f.requests.length,2);
+});
+test('upstream retry delay is bounded numeric metadata, never a raw error body',async t=>{
+ for(const value of ['17','0','-1','1.5','NaN','31622401','SECRET']) {
+  const f=await fixture(t,(_req,res)=>{res.writeHead(429,{'retry-after':value});res.end('SECRET');});
+  const r=await f.send();assert.equal(r.frames[0].retry_after_seconds,/^(17|0)$/.test(value)?Number(value):undefined);assert.equal(r.frames[0].dispatch_state,'maybe_sent');assert.equal(f.requests.length,1);assert.ok(!r.text.includes('SECRET'));
+ }
+ const f=await fixture(t,(_req,res)=>{res.writeHead(503,{'retry-after':new Date(Date.now()+60000).toUTCString()});res.end('SECRET');});
+ const r=await f.send();assert.ok(r.frames[0].retry_after_seconds>=58 && r.frames[0].retry_after_seconds<=60);assert.equal(f.requests.length,1);
+});

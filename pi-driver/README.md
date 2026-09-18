@@ -1,6 +1,6 @@
 # Optional Pi Codex HTTP driver — vertical slice
 
-This standalone Node.js sidecar **really invokes** the published `@earendil-works/pi-ai` Codex Responses implementation, exact-pinned to **0.85.1** with an npm lockfile. It is not a direct proxy relabeled Pi. No Go integration, CPA/Bifrost change, tool execution, automatic account selection, or full capability parity is claimed here.
+This standalone Node.js sidecar **really invokes** the published `@earendil-works/pi-ai` Codex Responses implementation, exact-pinned to **0.85.1** with an npm lockfile. It is not a direct proxy relabeled Pi. GPT-Load's Go executor connects to this sidecar only when explicitly enabled. Default CPA/Bifrost execution is unchanged; no tool execution, sidecar account selection, or full capability parity is claimed here.
 
 ## Run
 
@@ -24,6 +24,32 @@ Example configuration (do not include credentials):
 
 Binding must explicitly be `127.0.0.1` or `::1`. Both `GET /health` and `POST /v1/execute` require `Authorization: Bearer <PI_DRIVER_TOKEN>`. Keep the sidecar on a trusted host: loopback auth does not protect against a privileged local process. No credentials or upstream error text are logged. SIGTERM/SIGINT close connections and cancel requests.
 
+## Connect GPT-Load (native, same host)
+
+1. Start this sidecar on numeric loopback with a separately generated `PI_DRIVER_TOKEN`.
+2. Set GPT-Load's `EXPERIMENTAL_PI_ENABLED=true`, `PI_BRIDGE_URL=http://127.0.0.1:8788`, and `PI_BRIDGE_SECRET` to the same secret. Restart GPT-Load after changing process configuration.
+3. Explicitly set the Codex channel management parameter `execution_driver` to `pi-experimental`. Blank or `cpa` continues to use CPA. Requests routed to Pi must use native, stateless HTTP Responses; unsupported routes fail closed instead of falling back.
+4. Keep GPT-Load and the sidecar in the same network namespace. A separate default Docker container cannot reach host loopback; this branch does not supply Docker sidecar wiring.
+
+GPT-Load still owns credential selection, OAuth refresh, persistence, scheduling and quota policy. The sidecar receives only each attempt's access token and account identity, never a refresh token. Response diagnostics expose `X-GPT-Load-Driver: pi-experimental`.
+
+**Rollback:** change affected channels back to `cpa` first, then disable `EXPERIMENTAL_PI_ENABLED` and restart GPT-Load. Stop the sidecar after requests drain. Disabling the process switch while a channel still selects Pi intentionally causes explicit errors, not automatic CPA fallback.
+
+## Reproduce local verification
+
+Install the lockfile dependencies explicitly before verification. From the repository root:
+
+```sh
+npm --prefix pi-driver ci --ignore-scripts --no-audit --no-fund
+bash scripts/verify-pi-driver.sh
+# If Go is not on PATH:
+GO_BIN=/path/to/go bash scripts/verify-pi-driver.sh
+```
+
+The runner caps Go parallelism, disallows Go dependency/toolchain downloads, tests the actual Go → Node → pinned Pi chain against **synthetic local upstreams**, runs focused regression tests, `go vet` and a temporary build, then evaluates the release gate. It does not start Docker, use production accounts, or install dependencies. Populate the Go module cache separately if needed. Local success prints `LOCAL_SYNTHETIC_CHECKS=PASSED`; `FULL_PI_PARITY=BLOCKED` is a separate, expected result until every required capability has the specified evidence. A malformed inventory fails the runner. This focused runner does not replace the repository's full test suite.
+
+Run `node scripts/check-pi-parity.mjs` directly for release gating: exit 0 means the evidence gate is ready, 1 means missing verification, and 2 means invalid inventory. See [the evidence contract](../docs/pi-driver/evidence-contract.md). Never reinterpret synthetic tests as authorized live-account verification.
+
 ## Protocol v1
 
 POST JSON:
@@ -38,7 +64,7 @@ POST JSON:
 }
 ```
 
-Credentials are supplied per request. Account ID must exactly equal `https://api.openai.com/auth.chatgpt_account_id` decoded with the **same atob semantics as pinned Pi**. This is claim consistency validation, **not JWT signature verification**; upstream authenticates the token. There is no refresh/login/credential persistence.
+Credentials are supplied per request. Account ID must exactly equal `https://api.openai.com/auth.chatgpt_account_id` decoded from the JWT's Base64URL payload (optional trailing padding is accepted). This is claim consistency validation, **not JWT signature verification**; upstream authenticates the token. There is no refresh/login/credential persistence.
 
 Admission failures are HTTP 4xx JSON `{type:"error",code,status,dispatch_state:"not_sent"}` (capacity overload is 503). Admitted execution is HTTP 200 `application/x-ndjson`, even when the eventual upstream call fails:
 

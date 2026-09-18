@@ -25,15 +25,17 @@ const piMaxRequestBytes = 8 << 20
 type PiError struct {
 	code, dispatch string
 	status         int
+	retryAfter     *time.Duration
 }
 
-func (e *PiError) Error() string          { return "experimental pi driver: " + e.code }
-func (e *PiError) ErrorCode() string      { return e.code }
-func (e *PiError) ErrorType() string      { return "pi_driver_error" }
-func (e *PiError) StatusCode() int        { return e.status }
-func (e *PiError) ConversionCode() string { return e.code }
-func (e *PiError) DispatchState() string  { return e.dispatch }
-func piError(code, state string) *PiError { return &PiError{code: code, dispatch: state} }
+func (e *PiError) Error() string              { return "experimental pi driver: " + e.code }
+func (e *PiError) ErrorCode() string          { return e.code }
+func (e *PiError) ErrorType() string          { return "pi_driver_error" }
+func (e *PiError) StatusCode() int            { return e.status }
+func (e *PiError) ConversionCode() string     { return e.code }
+func (e *PiError) DispatchState() string      { return e.dispatch }
+func (e *PiError) RetryAfter() *time.Duration { return e.retryAfter }
+func piError(code, state string) *PiError     { return &PiError{code: code, dispatch: state} }
 
 type piExecutor struct {
 	endpoint, secret string
@@ -64,14 +66,15 @@ func NewPiExecutor(endpoint, secret string) (Executor, error) {
 }
 
 type piFrame struct {
-	Type     string            `json:"type"`
-	Driver   string            `json:"driver"`
-	Status   int               `json:"status"`
-	Headers  map[string]string `json:"headers"`
-	Dispatch string            `json:"dispatch_state"`
-	Data     []byte            `json:"data"`
-	Response json.RawMessage   `json:"response"`
-	Code     string            `json:"code"`
+	Type              string            `json:"type"`
+	Driver            string            `json:"driver"`
+	Status            int               `json:"status"`
+	Headers           map[string]string `json:"headers"`
+	Dispatch          string            `json:"dispatch_state"`
+	Data              []byte            `json:"data"`
+	Response          json.RawMessage   `json:"response"`
+	Code              string            `json:"code"`
+	RetryAfterSeconds json.RawMessage   `json:"retry_after_seconds"`
 }
 type piReader struct {
 	body     io.ReadCloser
@@ -103,7 +106,7 @@ func (r *piReader) next() (piFrame, error) {
 		case "unsupported_capability", "invalid_request", "unauthorized", "upstream_error", "transport_error", "cancelled", "internal_error", "overloaded":
 			code = "pi_" + f.Code
 		}
-		return f, &PiError{code: code, dispatch: f.Dispatch, status: f.Status}
+		return f, &PiError{code: code, dispatch: f.Dispatch, status: f.Status, retryAfter: piRetryAfter(f.RetryAfterSeconds)}
 	}
 	switch f.Type {
 	case "headers":
@@ -226,7 +229,8 @@ func (e *piExecutor) open(ctx context.Context, c Credential, q ExecuteRequest, s
 func piHeaders(f piFrame) (http.Header, map[string]string) {
 	h := make(http.Header)
 	quota := map[string]string{}
-	for k, v := range f.Headers {
+	filtered := piSafeMetadata(f.Headers)
+	for k, v := range filtered {
 		lower := strings.ToLower(k)
 		if len(v) > 4096 || strings.ContainsAny(v, "\r\n\x00") {
 			continue
