@@ -424,9 +424,15 @@ func (*codexProviderBridge) ClassifyError(
 		if retry := piErr.RetryAfter(); retry != nil && *retry > 0 {
 			evidence.RetryAfter = *retry
 		}
-		// The bridge does not supply the upstream error body. Keep generic
-		// hints only: no model scope, credential refresh, or CPA replay claims.
-		if status == http.StatusTooManyRequests {
+		// A Pi 401 with maybe_sent is an upstream authentication rejection:
+		// the bridge dispatched the request and the upstream rejected it before
+		// processing. This is the narrow exception that permits the existing CPA
+		// refresh policy; it does not permit replay of ambiguous model work.
+		if status == http.StatusUnauthorized && piErr.DispatchState() == "maybe_sent" {
+			evidence.Hint = execution.FailureHintRefreshRequired
+			evidence.OriginHint = execution.ErrorOriginUpstream
+			evidence.ReplaySafety = execution.ReplaySafetyRejectedBeforeProcessing
+		} else if status == http.StatusTooManyRequests {
 			evidence.Hint = execution.FailureHintRateLimited
 		} else if status >= http.StatusInternalServerError {
 			evidence.Hint = execution.FailureHintHostError

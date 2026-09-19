@@ -26,7 +26,9 @@ func TestPiAdapterErrorEvidence(t *testing.T) {
 		}{
 			{"rate_limit", `{"type":"error","code":"upstream_error","status":429,"dispatch_state":"maybe_sent","retry_after_seconds":17}`, "pi_upstream_error", 429, execution.DispatchMaybeSent, execution.ErrorKindHTTP, execution.FailureHintRateLimited, 17 * time.Second},
 			{"host_error", `{"type":"error","code":"upstream_error","status":503,"dispatch_state":"maybe_sent","retry_after_seconds":3}`, "pi_upstream_error", 503, execution.DispatchMaybeSent, execution.ErrorKindHTTP, execution.FailureHintHostError, 3 * time.Second},
-			{"unauthorized_ambiguous", `{"type":"error","code":"unauthorized","status":401,"dispatch_state":"maybe_sent"}`, "pi_unauthorized", 401, execution.DispatchMaybeSent, execution.ErrorKindHTTP, "", 0},
+			{"unauthorized_upstream", `{"type":"error","code":"unauthorized","status":401,"dispatch_state":"maybe_sent"}`, "pi_unauthorized", 401, execution.DispatchMaybeSent, execution.ErrorKindHTTP, execution.FailureHintRefreshRequired, 0},
+			{"unauthorized_unknown_code", `{"type":"error","code":"SYNTHETIC_PRIVATE_DETAIL","status":401,"dispatch_state":"maybe_sent"}`, "pi_bridge_error", 401, execution.DispatchMaybeSent, execution.ErrorKindHTTP, execution.FailureHintRefreshRequired, 0},
+			{"unauthorized_not_sent", `{"type":"error","code":"unauthorized","status":401,"dispatch_state":"not_sent"}`, "pi_unauthorized", 0, execution.DispatchNotSent, execution.ErrorKindInternal, "", 0},
 			{"not_sent", `{"type":"error","code":"unsupported_capability","status":0,"dispatch_state":"not_sent"}`, "pi_unsupported_capability", 0, execution.DispatchNotSent, execution.ErrorKindConversionUnsupported, "", 0},
 			{"failed_after_headers", piTestHeaders + "\n" + `{"type":"error","code":"upstream_error","status":200,"dispatch_state":"maybe_sent"}`, "pi_upstream_error", 0, execution.DispatchMaybeSent, execution.ErrorKindTransport, "", 0},
 			{"rate_limit_after_headers", piTestHeaders + "\n" + `{"type":"error","code":"upstream_error","status":429,"dispatch_state":"maybe_sent","retry_after_seconds":17}`, "pi_upstream_error", 429, execution.DispatchMaybeSent, execution.ErrorKindHTTP, execution.FailureHintRateLimited, 17 * time.Second},
@@ -46,19 +48,29 @@ func TestPiAdapterErrorEvidence(t *testing.T) {
 				var got execution.AttemptResult
 				if stream {
 					result := a.ExecuteStream(t.Context(), spec, func(execution.StreamEvent) error { return nil })
-					got = execution.AttemptResult{DispatchState: result.DispatchState, StatusCode: result.StatusCode, Error: result.Error}
+					got = execution.AttemptResult{DispatchState: result.DispatchState, ResponseStarted: result.StatusCode != 0, StatusCode: result.StatusCode, Error: result.Error}
 				} else {
 					got = a.Execute(t.Context(), spec)
 				}
 				if got.DispatchState != tc.dispatch || got.StatusCode != tc.status {
 					t.Errorf("dispatch/status = %s/%d, want %s/%d", got.DispatchState, got.StatusCode, tc.dispatch, tc.status)
 				}
+				if err := got.Validate(); err != nil {
+					t.Fatalf("invalid AttemptResult contract: %v; result=%+v", err, got)
+				}
 				e := got.Error
 				if e == nil {
 					t.Fatal("lost error evidence")
 				}
-				if e.Kind != tc.kind || e.StatusCode != tc.status || e.Type != "pi_driver_error" || e.Code != tc.code || e.Hint != tc.hint || e.RetryAfter != tc.retry || e.ScopeHint != "" || e.ReplaySafety != execution.ReplaySafetyUnknown {
-					t.Errorf("evidence = %+v; want kind=%s status=%d type=pi_driver_error code=%s hint=%s retry=%s, no inferred scope and unknown replay", e, tc.kind, tc.status, tc.code, tc.hint, tc.retry)
+				wantReplay := execution.ReplaySafetyUnknown
+				if tc.status == http.StatusUnauthorized && tc.dispatch == execution.DispatchMaybeSent {
+					wantReplay = execution.ReplaySafetyRejectedBeforeProcessing
+				}
+				if e.Kind != tc.kind || e.StatusCode != tc.status || e.Type != "pi_driver_error" || e.Code != tc.code || e.Hint != tc.hint || e.RetryAfter != tc.retry || e.ScopeHint != "" || e.ReplaySafety != wantReplay {
+					t.Errorf("evidence = %+v; want kind=%s status=%d type=pi_driver_error code=%s hint=%s retry=%s replay=%s, no inferred scope", e, tc.kind, tc.status, tc.code, tc.hint, tc.retry, wantReplay)
+				}
+				if tc.status == http.StatusUnauthorized && (e.OriginHint != execution.ErrorOriginUpstream || e.Hint != execution.FailureHintRefreshRequired) {
+					t.Errorf("unauthorized evidence = %+v; want upstream refresh classification", e)
 				}
 			})
 		}
