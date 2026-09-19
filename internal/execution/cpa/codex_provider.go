@@ -397,7 +397,23 @@ func (*codexProviderBridge) ClassifyError(
 		case piErr.ErrorCode() == "pi_cancelled" || ctx != nil && errors.Is(context.Cause(ctx), context.Canceled):
 			kind, status = execution.ErrorKindCanceled, 0
 		case piErr.DispatchState() == "not_sent":
-			kind = execution.ErrorKindConversionUnsupported
+			// Admission is local to the sidecar, not an upstream HTTP
+			// response. Only explicit capability codes mean unsupported;
+			// capacity/auth/unavailable/unknown failures are internal. Using
+			// transport here would make health skip the upstream group.
+			kind, origin := execution.ErrorKindInternal, execution.ErrorOriginInternal
+			switch piErr.ErrorCode() {
+			case "pi_unsupported_capability", "pi_unsupported_headers", "pi_conversion_unsupported":
+				kind = execution.ErrorKindConversionUnsupported
+			case "pi_invalid_request", "pi_model_mismatch", "pi_stream_mismatch":
+				kind, origin = execution.ErrorKindInvalidRequest, execution.ErrorOriginClient
+			}
+			// Status and retry-after describe sidecar admission, not account
+			// health or replay permission. not_sent forbids response metadata.
+			return 0, &execution.ErrorEvidence{
+				Kind: kind, OriginHint: origin, Type: piErr.ErrorType(), Code: piErr.ErrorCode(),
+				Summary: piErr.Error(), ReplaySafety: execution.ReplaySafetyUnknown,
+			}
 		case status != 0:
 			kind = execution.ErrorKindHTTP
 		}

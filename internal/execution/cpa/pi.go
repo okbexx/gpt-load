@@ -29,7 +29,7 @@ func NewAdapterWithConfig(credentials *subscription.CredentialManager, channels 
 	if err != nil {
 		return nil, err
 	}
-	a.piExecutor = pi
+	a.piExecutor = codex.NewPiConvertedExecutor(pi)
 	return a, nil
 }
 
@@ -40,10 +40,26 @@ type piProviderBridge struct{ base *codexProviderBridge }
 func (p *piProviderBridge) ProviderKind() channel.ProviderKind  { return channel.ProviderCodex }
 func (p *piProviderBridge) UpstreamProtocol() protocol.Protocol { return protocol.OpenAIResponses }
 func (p *piProviderBridge) ValidateRouteCapability(r channel.RouteDescriptor) error {
-	if r.ClientProtocol != protocol.OpenAIResponses || r.Operation != execution.OperationResponsesCreate || r.RouteMode != execution.RouteNative {
-		return fmt.Errorf("experimental pi only supports native HTTP Responses")
+	if !piSupportsRoute(r.ClientProtocol, r.Operation, r.RouteMode) {
+		return fmt.Errorf("experimental Pi does not implement this route")
 	}
 	return nil
+}
+
+func piSupportsRoute(client protocol.Protocol, operation execution.Operation, mode execution.RouteMode) bool {
+	if client == protocol.OpenAIResponses && mode == execution.RouteNative {
+		return operation == execution.OperationResponsesCreate || operation == execution.OperationResponsesInputTokens
+	}
+	if mode != execution.RouteConverted {
+		return false
+	}
+	switch client {
+	case protocol.OpenAICompletions:
+		return operation == execution.OperationChatCompletion
+	case protocol.Anthropic, protocol.Gemini:
+		return operation == execution.OperationChatCompletion || operation == execution.OperationCountTokens
+	}
+	return false
 }
 func (p *piProviderBridge) ParseCredential(raw []byte) (providerCredential, error) {
 	return p.base.ParseCredential(raw)
@@ -75,7 +91,15 @@ func scopedPiContinuityKey(key string, credentialID uint, generation uint64, mod
 	return "pi-" + hex.EncodeToString(digest[:16])
 }
 func (p *piProviderBridge) ValidateRequest(q providerRequest) error {
-	return codex.ValidatePiRequest(codex.ExecuteRequest{Model: q.Model, Payload: q.Payload, Format: q.Format, RequestPath: q.RequestPath, Headers: q.Headers, ConfiguredHeaders: q.ConfiguredHeaders, ProxyURL: q.ProxyURL, ProxyFromEnvironment: q.ProxyFromEnvironment})
+	if countTokensOperation(q.Operation) {
+		// Validation is shared pure schema logic; counting itself is independent.
+		return p.ValidateLocalTokenCount(q)
+	}
+	req := codex.ExecuteRequest{Model: q.Model, Payload: q.Payload, Format: q.Format, RequestPath: q.RequestPath, Headers: q.Headers, ConfiguredHeaders: q.ConfiguredHeaders, ProxyURL: q.ProxyURL, ProxyFromEnvironment: q.ProxyFromEnvironment}
+	if q.Format == "openai-response" {
+		return codex.ValidatePiRequest(req)
+	}
+	return codex.ValidatePiConvertedRequest(req, q.Stream)
 }
 
 func (a *Adapter) piAdmission(spec execution.AttemptSpec, websocket bool) string {
@@ -88,7 +112,7 @@ func (a *Adapter) piAdmission(spec execution.AttemptSpec, websocket bool) string
 	if json.Unmarshal(spec.TargetConfig, &selection) != nil || selection.Driver != "pi-experimental" {
 		return ""
 	}
-	if websocket || spec.ClientProtocol != protocol.OpenAIResponses || spec.Operation != execution.OperationResponsesCreate || spec.RouteMode != execution.RouteNative {
+	if websocket || !piSupportsRoute(spec.ClientProtocol, spec.Operation, spec.RouteMode) {
 		return "pi_unsupported_capability"
 	}
 	if a == nil || a.piExecutor == nil {

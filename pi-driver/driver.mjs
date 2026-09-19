@@ -2,6 +2,7 @@ import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { once } from 'node:events';
 import { safeMetadata, retrySeconds } from './metadata.mjs';
+import { createProxyFetch, validateProxyURL } from './proxy-transport.mjs';
 import { stream as codexStream } from '@earendil-works/pi-ai/api/openai-codex-responses';
 
 const DEFAULT_BASE = 'https://chatgpt.com/backend-api';
@@ -30,7 +31,11 @@ function validate(v, allowed) {
   if (v.body.store !== undefined && v.body.store !== false) fail('invalid_body');
   if (v.body.background !== undefined && v.body.background !== false) fail('unsupported_stateful_request');
   if (v.body.stream !== undefined && v.body.stream !== v.stream) fail('stream_mismatch');
-  if (v.proxy_url !== undefined && v.proxy_url !== '' && v.proxy_url !== 'direct') fail('unsupported_proxy');
+  let proxyURL = null;
+  if (v.proxy_url !== undefined && v.proxy_url !== '' && v.proxy_url !== 'direct') {
+    if (typeof v.proxy_url !== 'string') fail('unsupported_proxy');
+    try { proxyURL = validateProxyURL(v.proxy_url).href; } catch { fail('unsupported_proxy'); }
+  }
   // No client header overrides in this slice. Pi owns auth and transport headers.
   if (v.headers !== undefined && (!object(v.headers) || Object.keys(v.headers).length)) fail('unsupported_headers');
   if (v.session_id !== undefined && (typeof v.session_id !== 'string' || !/^[\x21-\x7e]{0,128}$/.test(v.session_id))) fail('invalid_session_id');
@@ -42,7 +47,7 @@ function validate(v, allowed) {
   } catch { fail('invalid_credential'); }
   const base = normalizeBaseUrl(v.base_url || DEFAULT_BASE);
   if (!allowed.has(base)) fail('upstream_not_allowed', 403);
-  return { ...v, base };
+  return { ...v, base, proxyURL };
 }
 async function readJSON(req, limit, signal) {
   return new Promise((resolve, reject) => {
@@ -152,6 +157,7 @@ export function createDriver({ token, allowedBaseUrls = [], limits: overrides = 
   const limits = { ...DEFAULT_LIMITS, ...overrides };
   for (const [key, value] of Object.entries(limits)) if (!(key in DEFAULT_LIMITS) || !Number.isSafeInteger(value) || value <= 0) throw new Error('invalid limits');
   const allowed = new Set([DEFAULT_BASE, ...allowedBaseUrls.map(normalizeBaseUrl)]);
+  const transportFetch = createProxyFetch();
   let active = 0;
   const server = http.createServer({ maxHeaderSize: 16384 }, async (req, res) => {
     if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) || !authorized(req, token)) {
@@ -196,7 +202,7 @@ export function createDriver({ token, allowedBaseUrls = [], limits: overrides = 
           state.dispatched = true;
           const wireHeaders = new Headers(init?.headers);
           wireHeaders.set('authorization', `Bearer ${v.credential.access_token}`);
-          const upstream = await fetch(url, { ...init, headers: wireHeaders, signal: abort.signal, redirect: 'manual' });
+          const upstream = await transportFetch(url, { ...init, headers: wireHeaders, signal: abort.signal, redirect: 'manual' }, v.proxyURL);
           state.status = upstream.status;
           if (!upstream.ok) state.retryAfter = retrySeconds(upstream.headers.get('retry-after'));
           if (!upstream.ok) { await upstream.body?.cancel(); state.code = upstream.status >= 300 && upstream.status < 400 ? 'upstream_redirect' : 'upstream_http_error'; throw new Error(state.code); }

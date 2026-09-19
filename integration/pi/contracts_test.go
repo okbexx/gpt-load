@@ -289,7 +289,7 @@ func TestRealPiUnsupportedBeforeDispatch(t *testing.T) {
 		{"background", func(q *codex.ExecuteRequest) { q.Payload = json.RawMessage(`{"input":[],"background":true}`) }},
 		{"stored", func(q *codex.ExecuteRequest) { q.Payload = json.RawMessage(`{"input":[],"store":true}`) }},
 		{"format", func(q *codex.ExecuteRequest) { q.Format = "openai" }},
-		{"proxy", func(q *codex.ExecuteRequest) { q.ProxyURL = "http://127.0.0.1:1" }},
+		{"proxy", func(q *codex.ExecuteRequest) { q.ProxyURL = "ftp://127.0.0.1:1" }},
 		// Missing input passes Go validation and is rejected by the actual Node
 		// validator; this protects not_sent on both sides of the subprocess boundary.
 		{"node_missing_input", func(q *codex.ExecuteRequest) { q.Payload = json.RawMessage(`{"model":"gpt-5.4"}`) }},

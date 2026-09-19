@@ -33,7 +33,7 @@ func TestExperimentalPiSelectionIsolation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		fmt.Fprintln(w, `{"type":"headers","driver":"pi","status":200,"dispatch_state":"maybe_sent"}`)
-		fmt.Fprintln(w, `{"type":"result","response":{"id":"pi","object":"response","output":[]}}`)
+		fmt.Fprintln(w, `{"type":"result","response":{"id":"pi","object":"response","status":"completed","output":[]}}`)
 		fmt.Fprintln(w, `{"type":"done","dispatch_state":"maybe_sent"}`)
 	}))
 	defer srv.Close()

@@ -103,7 +103,7 @@ func (r *piReader) next() (piFrame, error) {
 		// Never trust arbitrary bridge error strings as safe log content.
 		code := "pi_bridge_error"
 		switch f.Code {
-		case "unsupported_capability", "invalid_request", "unauthorized", "upstream_error", "transport_error", "cancelled", "internal_error", "overloaded",
+		case "unsupported_capability", "invalid_request", "unauthorized", "upstream_error", "transport_error", "cancelled", "internal_error", "overloaded", "busy",
 			"upstream_http_error", "upstream_redirect", "invalid_upstream_content_type", "missing_terminal", "pi_parse_error",
 			"timeout", "response_limit", "invalid_upstream_event", "upstream_failed", "driver_error", "duplicate_dispatch":
 			code = "pi_" + f.Code
@@ -124,6 +124,13 @@ func (r *piReader) next() (piFrame, error) {
 		if !r.headers || r.stream || r.result || len(f.Response) == 0 || f.Response[0] != '{' {
 			return bad()
 		}
+		// Match the sidecar's response.completed contract: an object alone
+		// is not completion evidence (failed/incomplete responses are objects too).
+		var terminal map[string]json.RawMessage
+		var status string
+		if json.Unmarshal(f.Response, &terminal) != nil || json.Unmarshal(terminal["status"], &status) != nil || status != "completed" {
+			return bad()
+		}
 		r.result = true
 	case "done":
 		if !r.headers || (!r.stream && !r.result) || f.Dispatch != "maybe_sent" {
@@ -138,7 +145,7 @@ func (r *piReader) next() (piFrame, error) {
 
 // ValidatePiRequest rejects unsupported semantics without contacting the bridge.
 func ValidatePiRequest(q ExecuteRequest) error {
-	if q.Format != "openai-response" || (q.RequestPath != "" && q.RequestPath != "/v1/responses") || len(q.ConfiguredHeaders) > 0 || q.ProxyFromEnvironment || (q.ProxyURL != "" && q.ProxyURL != "direct") {
+	if q.Format != "openai-response" || (q.RequestPath != "" && q.RequestPath != "/v1/responses") || len(q.ConfiguredHeaders) > 0 || q.ProxyFromEnvironment || !validPiProxy(q.ProxyURL) {
 		return piError("pi_unsupported_capability", "not_sent")
 	}
 	for key := range q.Headers {

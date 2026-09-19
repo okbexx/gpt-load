@@ -106,6 +106,8 @@ func annotateProviderErrorEvidence(evidence *execution.ErrorEvidence, err error)
 }
 
 type providerRequest struct {
+	Operation         execution.Operation
+	Stream            bool
 	AttemptID         string
 	Model             string
 	Payload           []byte

@@ -38,7 +38,7 @@ func TestPiUnaryContract(t *testing.T) {
 			t.Error("credential/header isolation")
 		}
 		fmt.Fprintln(w, `{"type":"headers","driver":"pi","status":200,"headers":{"x-request-id":"pi-1"},"dispatch_state":"maybe_sent"}`)
-		fmt.Fprintln(w, `{"type":"result","response":{"id":"resp_1","object":"response","output":[]}}`)
+		fmt.Fprintln(w, `{"type":"result","response":{"id":"resp_1","object":"response","status":"completed","output":[]}}`)
 		fmt.Fprintln(w, `{"type":"done","dispatch_state":"maybe_sent"}`)
 	}))
 	defer srv.Close()
@@ -51,9 +51,38 @@ func TestPiUnaryContract(t *testing.T) {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
 }
+func TestPiUnaryRequiresCompletedTerminal(t *testing.T) {
+	for _, response := range []string{`null`, `{}`, `{"STATUS":"completed"}`, `{"status":null}`, `{"status":"failed"}`, `{"status":"incomplete"}`, `{"status":"in_progress"}`, `{"status":200}`, `[]`, `{"status":"completed"}`} {
+		t.Run(response, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintln(w, `{"type":"headers","driver":"pi","status":200,"dispatch_state":"maybe_sent"}`)
+				fmt.Fprintf(w, "{\"type\":\"result\",\"response\":%s}\n", response)
+				fmt.Fprintln(w, `{"type":"done","dispatch_state":"maybe_sent"}`)
+			}))
+			defer srv.Close()
+			e, err := NewPiExecutor(srv.URL, strings.Repeat("x", 32))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := e.Execute(t.Context(), "", Credential{}, ExecuteRequest{Format: "openai-response", Payload: []byte(`{}`)})
+			if response == `{"status":"completed"}` {
+				if err != nil || string(got.Payload) != response {
+					t.Fatalf("valid terminal: %+v %v", got, err)
+				}
+				return
+			}
+			var pe *PiError
+			if !errors.As(err, &pe) || pe.ErrorCode() != "pi_bridge_protocol_error" || pe.DispatchState() != "maybe_sent" || len(got.Payload) != 0 {
+				t.Fatalf("invalid terminal accepted: %+v %v", got, err)
+			}
+		})
+	}
+}
+
 func TestPiFrameFailures(t *testing.T) {
 	for _, frames := range []string{
 		"", `{"type":"result","response":{}}`,
+		`{"type":"headers","driver":"pi","status":200,"dispatch_state":"maybe_sent"}` + "\n" + `{"type":"result"}` + "\n" + `{"type":"done","dispatch_state":"maybe_sent"}`,
 		"{\"type\":\"headers\",\"driver\":\"pi\",\"status\":200,\"dispatch_state\":\"maybe_sent\"}\n",
 		"{\"type\":\"headers\",\"driver\":\"pi\",\"status\":200,\"dispatch_state\":\"maybe_sent\"}\n{\"type\":\"done\",\"dispatch_state\":\"maybe_sent\"}\n",
 	} {

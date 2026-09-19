@@ -232,6 +232,15 @@ func (a *Adapter) Execute(ctx context.Context, spec execution.AttemptSpec) (resu
 				result.Body = append([]byte(nil), response.Payload...)
 			}
 		}
+		if _, pi := provider.(*piProviderBridge); pi && result.Error != nil {
+			// Bridge admission headers are not a successful model response.
+			// AttemptResult forbids response headers without a valid response
+			// status; retain only safe error evidence instead. Pi identity stays
+			// in Error.Type/Code, without inventing HTTP 200 or replay safety.
+			if retryAfter := response.Headers.Get("Retry-After"); retryAfter != "" {
+				result.Error.Header = http.Header{"Retry-After": []string{retryAfter}}
+			}
+		}
 		if result.Error != nil && execution.UpstreamCountTokensUnsupported(
 			spec.Operation,
 			result.Error.StatusCode,
@@ -559,7 +568,7 @@ func (a *Adapter) validateSpec(spec execution.AttemptSpec) (providerBridge, stri
 			if a.piExecutor == nil {
 				return nil, "", errors.New("experimental pi driver is disabled")
 			}
-			if spec.ClientProtocol != protocol.OpenAIResponses || spec.Operation != execution.OperationResponsesCreate || spec.RouteMode != execution.RouteNative {
+			if !piSupportsRoute(spec.ClientProtocol, spec.Operation, spec.RouteMode) {
 				return nil, "", errors.New("experimental pi capability unsupported")
 			}
 			provider = &piProviderBridge{base: &codexProviderBridge{executor: a.piExecutor}}
@@ -590,8 +599,35 @@ func bridgeRequest(
 		Driver string `json:"execution_driver"`
 	}
 	_ = json.Unmarshal(spec.TargetConfig, &driver)
+	if driver.Driver == "pi-experimental" && spec.ChannelID == string(channel.Codex) && proxySettings.FromEnvironment && !countTokensOperation(spec.Operation) {
+		endpoint := baseURL
+		if endpoint == "" {
+			endpoint = "https://chatgpt.com"
+		}
+		request, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return providerRequest{}, fmt.Errorf("invalid Pi proxy target")
+		}
+		selected, err := http.ProxyFromEnvironment(request)
+		if err != nil {
+			return providerRequest{}, fmt.Errorf("invalid Pi environment proxy")
+		}
+		proxySettings = cpaProxySettings{URL: "direct"}
+		if selected != nil {
+			proxySettings.URL = selected.String()
+		}
+	}
 	if driver.Driver == "pi-experimental" && spec.ChannelID == string(channel.Codex) && spec.ClientModel != spec.UpstreamModel {
-		rewritten, err := dialect.NewOpenAIResponses().RewriteRequestModel(&dialect.ParsedRequest{Method: spec.Method, Path: spec.Path, Header: headers, Body: payload}, spec.UpstreamModel)
+		clientDialect := map[protocol.Protocol]dialect.ModelRewriter{
+			protocol.OpenAIResponses:   dialect.NewOpenAIResponses(),
+			protocol.OpenAICompletions: dialect.NewOpenAI(),
+			protocol.Anthropic:         dialect.NewAnthropic(),
+			protocol.Gemini:            dialect.NewGemini(),
+		}[spec.ClientProtocol]
+		if clientDialect == nil {
+			return providerRequest{}, fmt.Errorf("unsupported Pi client protocol")
+		}
+		rewritten, err := clientDialect.RewriteRequestModel(&dialect.ParsedRequest{Method: spec.Method, Path: spec.Path, Header: headers, Body: payload}, spec.UpstreamModel)
 		if err != nil {
 			return providerRequest{}, err
 		}
@@ -629,6 +665,7 @@ func bridgeRequest(
 		headers = rebuilt.Header.Clone()
 	}
 	return providerRequest{
+		Operation: spec.Operation, Stream: stream,
 		AttemptID: spec.AttemptID, Model: spec.UpstreamModel, Payload: payload,
 		Format: formatFor(spec.ClientProtocol), RequestPath: requestPath, Headers: headers,
 		ConfiguredHeaders:            append([]string(nil), spec.ConfiguredHeaders...),

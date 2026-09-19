@@ -77,9 +77,44 @@ test('JWT parser compatibility remains request-local and preserves signed bytes'
   }
 });
 
+test('real Pi uses the explicitly selected HTTP proxy without direct fallback', async t => {
+  const f = await fixture(t);
+  let proxyCalls = 0;
+  const proxy = http.createServer((req, res) => {
+    proxyCalls++;
+    assert.equal(req.url, f.base + '/codex/responses');
+    assert.equal(req.headers['proxy-authorization'], 'Basic ' + Buffer.from('fixture-user:fixture-pass').toString('base64'));
+    const headers = {...req.headers};
+    delete headers['proxy-authorization'];
+    delete headers['proxy-connection'];
+    const upstream = http.request(req.url, {method:req.method, headers}, response => {
+      res.writeHead(response.statusCode, response.headers);
+      response.pipe(res);
+    });
+    upstream.on('error', () => {res.writeHead(502);res.end();});
+    req.pipe(upstream);
+  });
+  const origin = await listen(proxy);
+  t.after(async () => {proxy.closeAllConnections(); await new Promise(resolve => proxy.close(resolve));});
+  const proxyURL = origin.replace('http://', 'http://fixture-user:fixture-pass@');
+  for (const stream of [false, true]) {
+    const result = await f.send({stream, proxy_url:proxyURL});
+    assert.equal(result.frames.at(-1).type, 'done');
+  }
+  assert.equal(proxyCalls, 2);
+  assert.equal(f.requests.length, 2);
+  for (const request of f.requests) assert.equal(request.headers['proxy-authorization'], undefined);
+  await new Promise(resolve => proxy.close(resolve));
+  const failed = await f.send({proxy_url:proxyURL});
+  assert.equal(failed.frames.at(-1).type, 'error');
+  assert.equal(failed.frames.at(-1).dispatch_state, 'maybe_sent');
+  assert.equal(f.requests.length, 2, 'failed proxy must never dispatch directly');
+  assert.ok(!failed.text.includes('fixture-pass'));
+});
+
 test('admission rejects unsafe inputs before dispatch',async t=>{
  const f=await fixture(t);
- for(const change of [{provider:'other'},{proxy_url:'http://proxy'},{base_url:'http://127.0.0.1:1'},{base_url:'https://user:pass@chatgpt.com/backend-api'},{headers:{Authorization:'bad'}},{headers:{'chatgpt-account-id':'wrong'}},{headers:{Host:'other'}},{credential:{access_token:token,account_id:'wrong'}},{body:{previous_response_id:'prior'}},{body:{conversation:'prior'}},{body:{store:true}},{body:{background:true}},{body:{model:'different'}},{body:{stream:false}}]) {
+ for(const change of [{provider:'other'},{proxy_url:'ftp://proxy.invalid'},{base_url:'http://127.0.0.1:1'},{base_url:'https://user:pass@chatgpt.com/backend-api'},{headers:{Authorization:'bad'}},{headers:{'chatgpt-account-id':'wrong'}},{headers:{Host:'other'}},{credential:{access_token:token,account_id:'wrong'}},{body:{previous_response_id:'prior'}},{body:{conversation:'prior'}},{body:{store:true}},{body:{background:true}},{body:{model:'different'}},{body:{stream:false}}]) {
   if(change.body) change.body={...f.request.body,...change.body};
   const r=await f.send(change);assert.ok(r.status>=400);assert.equal(r.frames[0].dispatch_state,'not_sent');
  }
